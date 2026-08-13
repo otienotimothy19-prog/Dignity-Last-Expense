@@ -1,12 +1,10 @@
-import { promises as fs } from "fs";
-import path from "path";
 import QRCode from "qrcode";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { prisma } from "@/lib/prisma";
 import { formatKES, formatDateNairobi } from "@/lib/format";
+import { saveDocument } from "@/lib/storage";
 import { QuotationDocument, type QuotationPdfCategoryRow, type QuotationPdfMember } from "./QuotationDocument";
 
-const STORAGE_DIR = path.join(process.cwd(), "storage", "documents");
 const RELATIONSHIP_LABEL: Record<string, string> = {
   PRINCIPAL: "Principal",
   SPOUSE: "Spouse",
@@ -94,10 +92,8 @@ export async function generateQuotationPdf(quotationId: string, generatedById: s
     })
   );
 
-  await fs.mkdir(STORAGE_DIR, { recursive: true });
   const fileName = `${quotation.referenceCode}.pdf`;
-  const filePath = path.join(STORAGE_DIR, fileName);
-  await fs.writeFile(filePath, buffer);
+  await saveDocument(fileName, buffer);
 
   const document = await prisma.document.create({
     data: {

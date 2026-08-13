@@ -1,10 +1,7 @@
-import { promises as fs } from "fs";
-import path from "path";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-
-const STORAGE_DIR = path.join(process.cwd(), "storage", "documents");
+import { readDocument } from "@/lib/storage";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -18,8 +15,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const filePath = path.join(STORAGE_DIR, document.filePath);
-  const buffer = await fs.readFile(filePath);
+  const buffer = await readDocument(document.filePath);
 
   await prisma.auditLog.create({
     data: {
