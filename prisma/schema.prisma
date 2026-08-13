@@ -1,0 +1,601 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Users & roles
+// ---------------------------------------------------------------------------
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique // SUPER_ADMIN, ADMINISTRATOR, UNDERWRITER, AGENT, FINANCE, READ_ONLY
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  users User[]
+
+  @@map("roles")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  fullName     String   @map("full_name")
+  email        String   @unique
+  phone        String?
+  passwordHash String   @map("password_hash")
+  roleId       String   @map("role_id")
+  role         Role     @relation(fields: [roleId], references: [id])
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  quotationsCreated Quotation[]       @relation("QuotationCreatedBy")
+  policiesIssued    Policy[]          @relation("PolicyIssuedBy")
+  paymentsRecorded  Payment[]         @relation("PaymentRecordedBy")
+  documentsGenerated Document[]       @relation("DocumentGeneratedBy")
+  auditLogs         AuditLog[]
+  assignedClients   Client[]          @relation("ClientAgent")
+  assignedGroups    Group[]           @relation("GroupAgent")
+  passwordResetTokens PasswordResetToken[]
+
+  @@map("users")
+}
+
+// Only a SHA-256 hash of the raw token is ever stored — the raw token lives
+// only in the emailed link, so a database read alone can never be used to
+// reset an account (matches how NextAuth/Django/Rails handle this).
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("password_reset_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Clients & groups
+// ---------------------------------------------------------------------------
+
+model Client {
+  id         String   @id @default(uuid())
+  fullName   String   @map("full_name")
+  idNumber   String?  @map("id_number")
+  kraPin     String?  @map("kra_pin")
+  phone      String
+  email      String?
+  address    String?
+  agentId    String?  @map("agent_id")
+  agent      User?    @relation("ClientAgent", fields: [agentId], references: [id])
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  members    Member[]
+  quotations Quotation[]
+  policies   Policy[]
+
+  @@map("clients")
+}
+
+enum GroupType {
+  SACCO
+  CHURCH
+  CHAMA
+  SME
+  EMPLOYER
+  OTHER
+}
+
+model Group {
+  id                 String    @id @default(uuid())
+  name               String
+  groupType          GroupType @map("group_type")
+  registrationNumber String?   @map("registration_number")
+  kraPin             String?   @map("kra_pin")
+  contactPerson      String    @map("contact_person")
+  phone              String
+  email              String?
+  address            String?
+  agentId            String?   @map("agent_id")
+  agent              User?     @relation("GroupAgent", fields: [agentId], references: [id])
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  members    Member[]
+  quotations Quotation[]
+  policies   Policy[]
+
+  @@map("groups")
+}
+
+// ---------------------------------------------------------------------------
+// Member roster (principals) & dependants
+// ---------------------------------------------------------------------------
+
+model Member {
+  id           String   @id @default(uuid())
+  clientId     String?  @map("client_id")
+  client       Client?  @relation(fields: [clientId], references: [id])
+  groupId      String?  @map("group_id")
+  group        Group?   @relation(fields: [groupId], references: [id])
+  fullName     String   @map("full_name")
+  idNumber     String?  @map("id_number")
+  dob          DateTime
+  phone        String?
+  eligible     Boolean  @default(true)
+  ineligibilityReason String? @map("ineligibility_reason")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  dependants     Dependant[]
+  policyMembers  PolicyMember[]
+
+  @@map("members")
+}
+
+enum RelationshipType {
+  PRINCIPAL
+  SPOUSE
+  CHILD
+  PARENT
+  PARENT_IN_LAW
+}
+
+model Dependant {
+  id                  String           @id @default(uuid())
+  memberId            String           @map("member_id")
+  member              Member           @relation(fields: [memberId], references: [id])
+  relationship        RelationshipType
+  fullName            String           @map("full_name")
+  idNumber            String?          @map("id_number")
+  dob                 DateTime
+  eligible            Boolean          @default(true)
+  ineligibilityReason String?          @map("ineligibility_reason")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+
+  @@map("dependants")
+}
+
+// ---------------------------------------------------------------------------
+// Product configuration (admin-editable, never hard-coded)
+// ---------------------------------------------------------------------------
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  plans Plan[]
+
+  @@map("products")
+}
+
+enum PlanCode {
+  INDIVIDUAL
+  NUCLEAR_FAMILY
+  EXTENDED_FAMILY
+  GROUP_PLAN_A
+  GROUP_PLAN_B
+}
+
+model Plan {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  product   Product  @relation(fields: [productId], references: [id])
+  code      PlanCode
+  name      String
+  isGroup   Boolean  @default(false) @map("is_group")
+  isActive  Boolean  @default(true) @map("is_active")
+
+  // Which dependant types this plan covers at all — admin-configurable via
+  // "Edit Plan Details". Individual rate versions must keep the matching
+  // benefit/limit at 0 for any type this plan doesn't cover.
+  coversSpouse        Boolean @default(true) @map("covers_spouse")
+  coversChildren       Boolean @default(true) @map("covers_children")
+  coversParents        Boolean @default(true) @map("covers_parents")
+  coversParentsInLaw   Boolean @default(true) @map("covers_parents_in_law")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  benefitOptions BenefitOption[]
+  quotations     Quotation[]
+  policies       Policy[]
+
+  @@unique([productId, code])
+  @@map("plans")
+}
+
+model BenefitOption {
+  id          String   @id @default(uuid())
+  planId      String   @map("plan_id")
+  plan        Plan     @relation(fields: [planId], references: [id])
+  optionNumber Int     @map("option_number") // grade rank: Bronze=1/Silver=2/Gold=3 for individual/family plans, Option 1-6 for group plans
+  name        String
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  rateVersions RateVersion[]
+  quotations   Quotation[]
+  policies     Policy[]
+
+  @@unique([planId, optionNumber])
+  @@map("benefit_options")
+}
+
+enum RateVersionStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+model RateVersion {
+  id                     String    @id @default(uuid())
+  benefitOptionId        String    @map("benefit_option_id")
+  benefitOption          BenefitOption @relation(fields: [benefitOptionId], references: [id])
+  versionLabel           String    @map("version_label")
+
+  principalBenefit       Decimal   @map("principal_benefit") @db.Decimal(14, 2)
+  spouseBenefit          Decimal   @map("spouse_benefit") @db.Decimal(14, 2)
+  childBenefit           Decimal   @map("child_benefit") @db.Decimal(14, 2)
+  parentBenefit          Decimal   @map("parent_benefit") @db.Decimal(14, 2)
+  parentInLawBenefit     Decimal   @map("parent_in_law_benefit") @db.Decimal(14, 2)
+
+  maxChildren            Int       @map("max_children")
+  maxParents             Int       @default(2) @map("max_parents")
+  maxParentsInLaw        Int       @default(2) @map("max_parents_in_law")
+
+  annualRate             Decimal   @map("annual_rate") @db.Decimal(14, 2) // per contributor (group) or base premium (individual/family)
+  additionalChildRate    Decimal   @map("additional_child_rate") @db.Decimal(14, 2)
+
+  minGroupSize           Int       @default(1) @map("min_group_size")
+
+  // Principal / spouse entry age (years)
+  minAge                 Int       @map("min_age")
+  maxAge                 Int       @map("max_age")
+  // Child entry age
+  minChildAgeMonths      Int       @default(3) @map("min_child_age_months")
+  maxChildAgeYears       Int       @default(18) @map("max_child_age_years")
+  // Parent / parent-in-law entry age (years)
+  minParentAge           Int       @default(30) @map("min_parent_age")
+  maxParentAge           Int       @default(80) @map("max_parent_age")
+
+  waitingPeriodDays      Int       @map("waiting_period_days") // natural death
+  accidentWaitingPeriodDays Int    @default(0) @map("accident_waiting_period_days")
+  gracePeriodDays        Int       @default(7) @map("grace_period_days")
+  maxClaimsPerYear       Int       @default(3) @map("max_claims_per_year")
+  maxLifetimeBenefit     Decimal   @default(1000000) @map("max_lifetime_benefit") @db.Decimal(14, 2)
+  claimsSettlementHours  Int       @default(48) @map("claims_settlement_hours")
+  claimsLimitNotes       String?   @map("claims_limit_notes")
+
+  policyDurationMonths   Int       @default(12) @map("policy_duration_months")
+  paymentFrequency       String    @default("ANNUAL") @map("payment_frequency")
+
+  requiresApprovalBelowMin Boolean @default(true) @map("requires_approval_below_min")
+
+  status                 RateVersionStatus @default(DRAFT)
+  effectiveFrom          DateTime  @map("effective_from")
+  effectiveTo            DateTime? @map("effective_to")
+
+  createdAt              DateTime  @default(now()) @map("created_at")
+  createdById            String?   @map("created_by_id")
+  activatedAt            DateTime? @map("activated_at")
+  activatedById          String?   @map("activated_by_id")
+  clonedFromId           String?   @map("cloned_from_id")
+
+  quotations Quotation[]
+  policies   Policy[]
+
+  @@map("rate_versions")
+}
+
+// ---------------------------------------------------------------------------
+// Quotations
+// ---------------------------------------------------------------------------
+
+enum QuotationType {
+  INDIVIDUAL
+  GROUP
+}
+
+enum QuotationStatus {
+  DRAFT
+  GENERATED
+  SENT
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  CONVERTED_TO_POLICY
+}
+
+model Quotation {
+  id                    String          @id @default(uuid())
+  referenceCode         String          @unique @map("reference_code") // DIGN-Q-2026-000001 / DIGN-GQ-...
+  type                  QuotationType
+  status                QuotationStatus @default(DRAFT)
+  clientId              String?         @map("client_id")
+  client                Client?         @relation(fields: [clientId], references: [id])
+  groupId               String?         @map("group_id")
+  group                 Group?          @relation(fields: [groupId], references: [id])
+  planId                String          @map("plan_id")
+  plan                  Plan            @relation(fields: [planId], references: [id])
+  benefitOptionId       String          @map("benefit_option_id")
+  benefitOption         BenefitOption   @relation(fields: [benefitOptionId], references: [id])
+  rateVersionId         String          @map("rate_version_id")
+  rateVersion           RateVersion     @relation(fields: [rateVersionId], references: [id])
+  rateEffectiveDate      DateTime       @map("rate_effective_date")
+
+  numContributors       Int             @default(1) @map("num_contributors")
+  numSpouses            Int             @default(0) @map("num_spouses")
+  numChildren           Int             @default(0) @map("num_children")
+  numAdditionalChildren Int             @default(0) @map("num_additional_children")
+  numParents            Int             @default(0) @map("num_parents")
+  numParentsInLaw       Int             @default(0) @map("num_parents_in_law")
+
+  basePremium           Decimal         @map("base_premium") @db.Decimal(14, 2)
+  additionalChildPremium Decimal        @map("additional_child_premium") @db.Decimal(14, 2)
+  totalPremium           Decimal        @map("total_premium") @db.Decimal(14, 2)
+
+  minGroupSizeMet        Boolean        @default(true) @map("min_group_size_met")
+  requiresApproval        Boolean       @default(false) @map("requires_approval")
+
+  currentVersionNumber    Int           @default(1) @map("current_version_number")
+
+  issueDate                DateTime     @default(now()) @map("issue_date")
+  validUntil                DateTime    @map("valid_until")
+
+  createdById               String      @map("created_by_id")
+  createdBy                 User        @relation("QuotationCreatedBy", fields: [createdById], references: [id])
+  createdAt                 DateTime    @default(now()) @map("created_at")
+  updatedAt                 DateTime    @updatedAt @map("updated_at")
+
+  versions   QuotationVersion[]
+  members    QuotationMember[]
+  documents  Document[]
+  policy     Policy?
+  payments   Payment[]
+
+  @@map("quotations")
+}
+
+model QuotationVersion {
+  id             String   @id @default(uuid())
+  quotationId    String   @map("quotation_id")
+  quotation      Quotation @relation(fields: [quotationId], references: [id])
+  versionNumber  Int      @map("version_number") // 1, 2 (R1), 3 (R2)...
+  referenceSuffix String  @map("reference_suffix") // "" for v1, "-R1", "-R2"
+  snapshot       Json     // full inputs + calculated benefits + premium at this version
+  reason         String?
+  createdById    String   @map("created_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  policiesIssuedFrom Policy[]
+
+  @@unique([quotationId, versionNumber])
+  @@map("quotation_versions")
+}
+
+model QuotationMember {
+  id             String           @id @default(uuid())
+  quotationId    String           @map("quotation_id")
+  quotation      Quotation        @relation(fields: [quotationId], references: [id])
+  relationship   RelationshipType
+  fullName       String           @map("full_name")
+  idNumber       String?          @map("id_number")
+  dob            DateTime?
+  benefitAmount  Decimal          @map("benefit_amount") @db.Decimal(14, 2)
+  eligible       Boolean          @default(true)
+  ineligibilityReason String?     @map("ineligibility_reason")
+
+  // Set when a permitted user (Admin/Underwriter) overrides an otherwise
+  // ineligible member — eligible flips to true but the override is recorded
+  // permanently and never silently hidden.
+  overridden       Boolean        @default(false)
+  overrideReason   String?        @map("override_reason")
+  overriddenById   String?        @map("overridden_by_id")
+
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  @@map("quotation_members")
+}
+
+// ---------------------------------------------------------------------------
+// Policies
+// ---------------------------------------------------------------------------
+
+enum PolicyStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  LAPSED
+}
+
+model Policy {
+  id                  String        @id @default(uuid())
+  referenceCode       String        @unique @map("reference_code") // DIGN-P-2026-000001 / DIGN-GP-...
+  quotationId         String        @unique @map("quotation_id")
+  quotation           Quotation     @relation(fields: [quotationId], references: [id])
+  quotationVersionId  String        @map("quotation_version_id")
+  quotationVersion    QuotationVersion @relation(fields: [quotationVersionId], references: [id])
+
+  type                QuotationType
+  status              PolicyStatus  @default(PENDING)
+
+  clientId            String?       @map("client_id")
+  client              Client?       @relation(fields: [clientId], references: [id])
+  groupId             String?       @map("group_id")
+  group               Group?        @relation(fields: [groupId], references: [id])
+
+  planId              String        @map("plan_id")
+  plan                Plan          @relation(fields: [planId], references: [id])
+  benefitOptionId     String        @map("benefit_option_id")
+  benefitOption       BenefitOption @relation(fields: [benefitOptionId], references: [id])
+  rateVersionId       String        @map("rate_version_id")
+  rateVersion         RateVersion   @relation(fields: [rateVersionId], references: [id])
+
+  premiumPaid         Decimal       @map("premium_paid") @db.Decimal(14, 2)
+  coverStart          DateTime      @map("cover_start")
+  coverEnd            DateTime      @map("cover_end")
+
+  issuedById          String        @map("issued_by_id")
+  issuedBy            User          @relation("PolicyIssuedBy", fields: [issuedById], references: [id])
+  issuedAt            DateTime      @default(now()) @map("issued_at")
+
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  members    PolicyMember[]
+  documents  Document[]
+  payments   Payment[]
+
+  @@map("policies")
+}
+
+model PolicyMember {
+  id             String           @id @default(uuid())
+  policyId       String           @map("policy_id")
+  policy         Policy           @relation(fields: [policyId], references: [id])
+  memberId       String?          @map("member_id")
+  member         Member?          @relation(fields: [memberId], references: [id])
+  relationship   RelationshipType
+  fullName       String           @map("full_name")
+  idNumber       String?          @map("id_number")
+  dob            DateTime?
+  benefitAmount  Decimal          @map("benefit_amount") @db.Decimal(14, 2)
+  eligible       Boolean          @default(true)
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  @@map("policy_members")
+}
+
+// ---------------------------------------------------------------------------
+// Payments
+// ---------------------------------------------------------------------------
+
+enum PaymentMethod {
+  MPESA
+  BANK
+  CASH
+  CHEQUE
+  OTHER
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  quotationId       String?       @map("quotation_id")
+  quotation         Quotation?    @relation(fields: [quotationId], references: [id])
+  policyId          String?       @map("policy_id")
+  policy            Policy?       @relation(fields: [policyId], references: [id])
+  amountInvoiced    Decimal       @map("amount_invoiced") @db.Decimal(14, 2)
+  amountPaid        Decimal       @map("amount_paid") @db.Decimal(14, 2)
+  method            PaymentMethod
+  mpesaCode         String?       @map("mpesa_code")
+  bankReference     String?       @map("bank_reference")
+  receiptNumber     String?       @map("receipt_number")
+  paymentDate       DateTime      @map("payment_date")
+  outstandingBalance Decimal      @map("outstanding_balance") @db.Decimal(14, 2)
+  recordedById      String        @map("recorded_by_id")
+  recordedBy        User          @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  @@map("payments")
+}
+
+// ---------------------------------------------------------------------------
+// Documents & sequences
+// ---------------------------------------------------------------------------
+
+enum DocumentType {
+  QUOTATION
+  POLICY
+}
+
+model Document {
+  id             String       @id @default(uuid())
+  type           DocumentType
+  referenceCode  String       @map("reference_code") // includes -R1/-R2 suffix if applicable
+  quotationId    String?      @map("quotation_id")
+  quotation      Quotation?   @relation(fields: [quotationId], references: [id])
+  policyId       String?      @map("policy_id")
+  policy         Policy?      @relation(fields: [policyId], references: [id])
+  filePath       String       @map("file_path")
+  generatedById  String       @map("generated_by_id")
+  generatedBy    User         @relation("DocumentGeneratedBy", fields: [generatedById], references: [id])
+  generatedAt    DateTime     @default(now()) @map("generated_at")
+
+  @@map("documents")
+}
+
+model DocumentSequence {
+  id         String   @id @default(uuid())
+  prefix     String   // DIGN-Q, DIGN-GQ, DIGN-P, DIGN-GP
+  year       Int
+  lastNumber Int      @default(0) @map("last_number")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([prefix, year])
+  @@map("document_sequences")
+}
+
+// ---------------------------------------------------------------------------
+// Audit & email logs
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  userId       String?  @map("user_id")
+  user         User?    @relation(fields: [userId], references: [id])
+  action       String
+  entityType   String   @map("entity_type")
+  entityRef    String?  @map("entity_ref") // human-readable reference code
+  oldValue     Json?    @map("old_value")
+  newValue     Json?    @map("new_value")
+  reason       String?
+  ipAddress    String?  @map("ip_address")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("audit_logs")
+}
+
+enum EmailStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+// EMAIL is live today; WHATSAPP is reserved so the send-attempt log has a
+// stable shape ready for that channel once it's wired up.
+enum SendChannel {
+  EMAIL
+  WHATSAPP
+}
+
+model EmailLog {
+  id            String      @id @default(uuid())
+  toAddress     String      @map("to_address")
+  subject       String
+  template      String
+  entityRef     String?     @map("entity_ref")
+  status        EmailStatus @default(QUEUED)
+  error         String?
+  sentAt        DateTime?   @map("sent_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  channel       SendChannel @default(EMAIL)
+  sentById      String?     @map("sent_by_id")
+
+  @@map("email_logs")
+}

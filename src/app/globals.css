@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f3f4f6;
+  --foreground: #1e293b;
+
+  /* Imoth Insurance Brokers brand palette */
+  --imoth-navy: #0a1f44;
+  --imoth-navy-light: #16305c;
+  --imoth-blue: #123b7a;
+  --imoth-blue-light: #1e56a0;
+  --imoth-blue-pale: #eaf1fb;
+  --imoth-red: #c8102e;
+  --imoth-red-dark: #9c0c23;
+  --imoth-red-pale: #fbeaec;
+  --imoth-grey-bg: #f3f4f6;
+  --imoth-grey-border: #e2e5ea;
+  --imoth-grey-muted: #64748b;
+
+  /* Status semantics */
+  --status-grey: #6b7280;
+  --status-blue: #2563eb;
+  --status-purple: #7c3aed;
+  --status-green: #16a34a;
+  --status-red: #dc2626;
+  --status-orange: #ea580c;
+  --status-navy: #0a1f44;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --color-imoth-navy: var(--imoth-navy);
+  --color-imoth-navy-light: var(--imoth-navy-light);
+  --color-imoth-blue: var(--imoth-blue);
+  --color-imoth-blue-light: var(--imoth-blue-light);
+  --color-imoth-blue-pale: var(--imoth-blue-pale);
+  --color-imoth-red: var(--imoth-red);
+  --color-imoth-red-dark: var(--imoth-red-dark);
+  --color-imoth-red-pale: var(--imoth-red-pale);
+  --color-imoth-grey-bg: var(--imoth-grey-bg);
+  --color-imoth-grey-border: var(--imoth-grey-border);
+  --color-imoth-grey-muted: var(--imoth-grey-muted);
+
+  --color-status-grey: var(--status-grey);
+  --color-status-blue: var(--status-blue);
+  --color-status-purple: var(--status-purple);
+  --color-status-green: var(--status-green);
+  --color-status-red: var(--status-red);
+  --color-status-orange: var(--status-orange);
+  --color-status-navy: var(--status-navy);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+::selection {
+  background: var(--imoth-blue-pale);
+  color: var(--imoth-navy);
+}
