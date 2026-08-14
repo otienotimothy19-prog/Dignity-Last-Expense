@@ -13,15 +13,26 @@ function n(formData: FormData, key: string): number {
   return Number.isFinite(v) && v > 0 ? v : 0;
 }
 
+// One beneficiary per family (contributor + dependants), captured client-side
+// alongside the member schedule and serialized as JSON — see GroupQuotationForm.
 function parseBeneficiaries(formData: FormData): BeneficiaryInput[] {
+  let raw: unknown[];
+  try {
+    raw = JSON.parse(String(formData.get("beneficiariesJson") ?? "[]"));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(raw)) return [];
+
   const out: BeneficiaryInput[] = [];
-  for (let i = 0; i < 3; i++) {
-    const fullName = String(formData.get(`beneficiary_name_${i}`) ?? "").trim();
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const fullName = String((entry as Record<string, unknown>).fullName ?? "").trim();
     if (!fullName) continue;
     out.push({
       fullName,
-      relationship: String(formData.get(`beneficiary_relationship_${i}`) ?? "").trim() || "Not specified",
-      phone: String(formData.get(`beneficiary_phone_${i}`) ?? "").trim(),
+      relationship: String((entry as Record<string, unknown>).relationship ?? "").trim() || "Not specified",
+      phone: String((entry as Record<string, unknown>).phone ?? "").trim(),
     });
   }
   return out;

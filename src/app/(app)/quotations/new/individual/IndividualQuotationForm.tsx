@@ -300,18 +300,14 @@ export function IndividualQuotationForm({ tiers, allowOverride }: { tiers: TierO
           </div>
 
           <div data-step={4} className={step === 4 ? "" : "hidden"}>
-            <Section title="Beneficiaries (optional)">
+            <Section title="Beneficiary (optional)">
               <p className="mb-4 text-xs text-imoth-grey-muted">
-                Who receives the payout — can be different from the members covered above.
+                Who receives the payout — can be different from the members covered above. One beneficiary per policy.
               </p>
               <div className="grid grid-cols-3 gap-4">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="col-span-3 grid grid-cols-3 gap-4 border-t border-imoth-grey-border/60 pt-3 first:border-0 first:pt-0">
-                    <TextField label={`Beneficiary ${i + 1} full name`} name={`beneficiary_name_${i}`} />
-                    <TextField label="Relationship" name={`beneficiary_relationship_${i}`} />
-                    <TextField label="Phone" name={`beneficiary_phone_${i}`} />
-                  </div>
-                ))}
+                <TextField label="Full name" name="beneficiary_name_0" />
+                <TextField label="Relationship" name="beneficiary_relationship_0" />
+                <TextField label="Phone" name="beneficiary_phone_0" />
               </div>
             </Section>
           </div>

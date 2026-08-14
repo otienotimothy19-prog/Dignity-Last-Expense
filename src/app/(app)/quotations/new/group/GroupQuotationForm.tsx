@@ -52,8 +52,10 @@ type Preview = {
 };
 
 type EditableRow = { relationship: RelationshipType | ""; fullName: string; idNumber: string; dobRaw: string };
+type BeneficiaryDraft = { fullName: string; relationship: string; phone: string };
 
 const emptyRow: EditableRow = { relationship: "", fullName: "", idNumber: "", dobRaw: "" };
+const emptyBeneficiary: BeneficiaryDraft = { fullName: "", relationship: "", phone: "" };
 
 function toScheduleRow(row: EditableRow, index: number): ScheduleRow {
   const dobValid = !!row.dobRaw && !Number.isNaN(new Date(row.dobRaw).getTime());
@@ -88,7 +90,20 @@ export function GroupQuotationForm({ options, allowOverride }: { options: GroupB
   const [scheduleMode, setScheduleMode] = useState<"summary" | "schedule">("summary");
   const [rows, setRows] = useState<EditableRow[]>([]);
   const [overrideReasons, setOverrideReasons] = useState<Record<number, string>>({});
+  const [familyBeneficiaries, setFamilyBeneficiaries] = useState<Record<number, BeneficiaryDraft>>({});
   const formRef = useRef<HTMLFormElement>(null);
+
+  // A "family" is one contributor (PRINCIPAL row) plus their dependants —
+  // each gets exactly one beneficiary. Only meaningful in schedule mode,
+  // since summary mode has no named contributors to attach a beneficiary to.
+  const familyRowIndices = useMemo(
+    () => rows.map((r, i) => ({ r, i })).filter(({ r }) => r.relationship === "PRINCIPAL").map(({ i }) => i),
+    [rows]
+  );
+
+  function updateBeneficiary(rowIndex: number, patch: Partial<BeneficiaryDraft>) {
+    setFamilyBeneficiaries((prev) => ({ ...prev, [rowIndex]: { ...emptyBeneficiary, ...prev[rowIndex], ...patch } }));
+  }
 
   const selected = options.find((o) => o.benefitOptionId === benefitOptionId);
 
@@ -209,6 +224,17 @@ export function GroupQuotationForm({ options, allowOverride }: { options: GroupB
           <input type="hidden" name="scheduleMode" value={scheduleMode} />
           <input type="hidden" name="scheduleCsv" value={scheduleMode === "schedule" ? serializeRowsToCsv(rows) : ""} />
           <input type="hidden" name="overrideReasonsJson" value={JSON.stringify(overrideReasons)} />
+          <input
+            type="hidden"
+            name="beneficiariesJson"
+            value={JSON.stringify(
+              scheduleMode === "schedule"
+                ? familyRowIndices
+                    .map((i) => familyBeneficiaries[i])
+                    .filter((b): b is BeneficiaryDraft => !!b?.fullName.trim())
+                : []
+            )}
+          />
 
           <div data-step={1} className={step === 1 ? "" : "hidden"}>
             <Section title="Group details">
@@ -446,18 +472,60 @@ export function GroupQuotationForm({ options, allowOverride }: { options: GroupB
 
           <div data-step={4} className={step === 4 ? "" : "hidden"}>
             <Section title="Beneficiaries (optional)">
-              <p className="mb-4 text-xs text-imoth-grey-muted">
-                Who receives the payout for this group&apos;s cover.
-              </p>
-              <div className="grid grid-cols-3 gap-4">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="col-span-3 grid grid-cols-3 gap-4 border-t border-imoth-grey-border/60 pt-3 first:border-0 first:pt-0">
-                    <TextField label={`Beneficiary ${i + 1} full name`} name={`beneficiary_name_${i}`} />
-                    <TextField label="Relationship" name={`beneficiary_relationship_${i}`} />
-                    <TextField label="Phone" name={`beneficiary_phone_${i}`} />
+              {scheduleMode === "schedule" ? (
+                familyRowIndices.length > 0 ? (
+                  <div className="space-y-4">
+                    <p className="text-xs text-imoth-grey-muted">
+                      Each family (contributor + their dependants) has its own beneficiary.
+                    </p>
+                    {familyRowIndices.map((rowIndex, familyNumber) => {
+                      const contributorName = rows[rowIndex]?.fullName.trim();
+                      const b = familyBeneficiaries[rowIndex] ?? emptyBeneficiary;
+                      return (
+                        <div key={rowIndex} className="grid grid-cols-3 gap-4 border-t border-imoth-grey-border/60 pt-3 first:border-0 first:pt-0">
+                          <p className="col-span-3 text-xs font-semibold text-imoth-navy">
+                            Family {familyNumber + 1}
+                            {contributorName ? ` — ${contributorName}` : ""}
+                          </p>
+                          <label className="text-sm font-medium text-imoth-navy">
+                            Beneficiary full name
+                            <input
+                              value={b.fullName}
+                              onChange={(e) => updateBeneficiary(rowIndex, { fullName: e.target.value })}
+                              className="mt-1 w-full rounded-lg border border-imoth-grey-border px-3 py-2.5 text-sm"
+                            />
+                          </label>
+                          <label className="text-sm font-medium text-imoth-navy">
+                            Relationship
+                            <input
+                              value={b.relationship}
+                              onChange={(e) => updateBeneficiary(rowIndex, { relationship: e.target.value })}
+                              className="mt-1 w-full rounded-lg border border-imoth-grey-border px-3 py-2.5 text-sm"
+                            />
+                          </label>
+                          <label className="text-sm font-medium text-imoth-navy">
+                            Phone
+                            <input
+                              value={b.phone}
+                              onChange={(e) => updateBeneficiary(rowIndex, { phone: e.target.value })}
+                              className="mt-1 w-full rounded-lg border border-imoth-grey-border px-3 py-2.5 text-sm"
+                            />
+                          </label>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
+                ) : (
+                  <p className="text-sm text-imoth-grey-muted">
+                    Add PRINCIPAL rows to the member schedule (previous step) to capture a beneficiary for each family.
+                  </p>
+                )
+              ) : (
+                <p className="text-sm text-imoth-grey-muted">
+                  Beneficiaries are captured per family, which requires named contributors — switch to
+                  &quot;Full member schedule&quot; on the previous step to add one.
+                </p>
+              )}
             </Section>
           </div>
 

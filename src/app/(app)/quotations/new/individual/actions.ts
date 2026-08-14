@@ -7,18 +7,18 @@ import { hasPermission, canOverrideEligibility } from "@/lib/permissions";
 import { createIndividualQuotation, type MemberInput, type BeneficiaryInput } from "@/lib/quotation-service";
 import type { RelationshipType } from "@prisma/client";
 
+// Individual/Nuclear/Extended Family quotations take exactly one
+// beneficiary — the wizard only offers one input set (index 0).
 function parseBeneficiaries(formData: FormData): BeneficiaryInput[] {
-  const out: BeneficiaryInput[] = [];
-  for (let i = 0; i < 3; i++) {
-    const fullName = String(formData.get(`beneficiary_name_${i}`) ?? "").trim();
-    if (!fullName) continue;
-    out.push({
+  const fullName = String(formData.get("beneficiary_name_0") ?? "").trim();
+  if (!fullName) return [];
+  return [
+    {
       fullName,
-      relationship: String(formData.get(`beneficiary_relationship_${i}`) ?? "").trim() || "Not specified",
-      phone: String(formData.get(`beneficiary_phone_${i}`) ?? "").trim(),
-    });
-  }
-  return out;
+      relationship: String(formData.get("beneficiary_relationship_0") ?? "").trim() || "Not specified",
+      phone: String(formData.get("beneficiary_phone_0") ?? "").trim(),
+    },
+  ];
 }
 
 function rows(
