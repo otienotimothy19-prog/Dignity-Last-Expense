@@ -375,6 +375,9 @@ model Quotation {
   policy     Policy?
   payments   Payment[]
 
+  @@index([status])
+  @@index([deletedAt])
+  @@index([createdById])
   @@map("quotations")
 }
 
@@ -472,6 +475,8 @@ model Policy {
   documents  Document[]
   payments   Payment[]
 
+  @@index([status])
+  @@index([deletedAt])
   @@map("policies")
 }
 
@@ -547,6 +552,8 @@ model Document {
   generatedBy    User         @relation("DocumentGeneratedBy", fields: [generatedById], references: [id])
   generatedAt    DateTime     @default(now()) @map("generated_at")
 
+  @@index([quotationId])
+  @@index([policyId])
   @@map("documents")
 }
 
@@ -578,6 +585,10 @@ model AuditLog {
   ipAddress    String?  @map("ip_address")
   createdAt    DateTime @default(now()) @map("created_at")
 
+  // Covers per-entity detail-page lookups (filter + sort in one index) and
+  // the dashboard's global "10 most recent" query (sort only).
+  @@index([entityRef, createdAt])
+  @@index([createdAt])
   @@map("audit_logs")
 }
 
@@ -608,5 +619,6 @@ model EmailLog {
   channel       SendChannel @default(EMAIL)
   sentById      String?     @map("sent_by_id")
 
+  @@index([entityRef, createdAt])
   @@map("email_logs")
 }
