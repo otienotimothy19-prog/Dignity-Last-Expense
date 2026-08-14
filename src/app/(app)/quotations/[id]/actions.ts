@@ -1,7 +1,5 @@
 "use server";
 
-import { promises as fs } from "fs";
-import path from "path";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
@@ -13,6 +11,7 @@ import { createIndividualQuotation, createGroupQuotation } from "@/lib/quotation
 import { issuePolicyFromQuotation } from "@/lib/policy-service";
 import { generatePolicyPdf } from "@/lib/pdf/generate-policy-pdf";
 import { sendEmail } from "@/lib/mailer";
+import { readDocument } from "@/lib/storage";
 import type { QuotationStatus, SendChannel } from "@prisma/client";
 
 export async function generatePdfAction(quotationId: string) {
@@ -112,7 +111,7 @@ export async function sendQuotationEmailAction(
   if (!doc) {
     return "Generate the PDF before sending this quotation.";
   }
-  const fileBuffer = await fs.readFile(path.join(process.cwd(), "storage", "documents", doc.filePath));
+  const fileBuffer = await readDocument(doc.filePath);
 
   const subject = `Your Dignity Last Expense Quotation — ${quotation.referenceCode}`;
   const result = await sendEmail({
