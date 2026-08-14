@@ -18,6 +18,11 @@ export const QUOTATION_PERMISSIONS = [
   "quotations.accept",
   "quotations.decline",
   "quotations.convert",
+  // Also gates policy deletion — no dedicated policies.* permission
+  // dimension exists yet (same reasoning as reusing quotations.generate
+  // for policy PDF generation), and both are the same "remove a mistaken
+  // or unwanted record" capability restricted to the same trust level.
+  "quotations.delete",
 ] as const;
 
 export type RatePermission = (typeof RATE_PERMISSIONS)[number];
@@ -42,6 +47,7 @@ const PERMISSION_ROLES: Record<Permission, RoleName[]> = {
   "quotations.accept": ["SUPER_ADMIN", "ADMINISTRATOR", "AGENT", "UNDERWRITER"],
   "quotations.decline": ["SUPER_ADMIN", "ADMINISTRATOR", "AGENT", "UNDERWRITER"],
   "quotations.convert": ["SUPER_ADMIN", "ADMINISTRATOR", "UNDERWRITER"],
+  "quotations.delete": ["SUPER_ADMIN", "ADMINISTRATOR"],
 };
 
 // Roles allowed to override a flagged (age/limit-ineligible) member instead

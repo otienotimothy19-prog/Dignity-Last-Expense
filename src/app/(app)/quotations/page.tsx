@@ -39,6 +39,7 @@ export default async function QuotationsPage({
   const validType = type === "INDIVIDUAL" || type === "GROUP" ? type : undefined;
 
   const where = {
+    deletedAt: null,
     ...(isAgentScoped(session!.user.role) ? { createdById: session!.user.id } : {}),
     ...(validStatus ? { status: validStatus as never } : {}),
     ...(validType ? { type: validType as never } : {}),

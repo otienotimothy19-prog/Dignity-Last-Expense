@@ -361,6 +361,14 @@ model Quotation {
   createdAt                 DateTime    @default(now()) @map("created_at")
   updatedAt                 DateTime    @updatedAt @map("updated_at")
 
+  // Soft delete only — nothing here is a candidate for a real delete: audit
+  // logs, documents, and (once converted) a policy all reference a
+  // quotation by id/referenceCode, and rate/premium snapshots must stay
+  // permanently retrievable regardless of what a user later removes from
+  // their own lists. Excluded from lists/search/QR-verify once set; the row
+  // and every related record stay intact.
+  deletedAt  DateTime?  @map("deleted_at")
+
   versions   QuotationVersion[]
   members    QuotationMember[]
   documents  Document[]
@@ -456,6 +464,9 @@ model Policy {
 
   createdAt           DateTime      @default(now()) @map("created_at")
   updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  // Soft delete only — see the matching note on Quotation.deletedAt.
+  deletedAt  DateTime?  @map("deleted_at")
 
   members    PolicyMember[]
   documents  Document[]

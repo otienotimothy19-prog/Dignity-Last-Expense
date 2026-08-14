@@ -21,7 +21,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Table, THead, TBody, Tr, Th, Td, TableCard } from "@/components/ui/Table";
 import { ConfirmSubmitButton } from "@/components/ui/ConfirmationDialog";
-import { generatePdfAction, transitionStatusAction, duplicateQuotationAction, convertToPolicyAction } from "./actions";
+import { generatePdfAction, transitionStatusAction, duplicateQuotationAction, convertToPolicyAction, deleteQuotationAction } from "./actions";
 import { SendQuotationForm } from "./SendQuotationForm";
 import { WhatsAppShare } from "./WhatsAppShare";
 
@@ -56,7 +56,7 @@ export default async function QuotationDetailPage({
       },
     }),
   ]);
-  if (!quotation) notFound();
+  if (!quotation || quotation.deletedAt) notFound();
 
   const role = session?.user.role ?? "";
   const canGenerate = hasPermission(role, "quotations.generate");
@@ -65,6 +65,8 @@ export default async function QuotationDetailPage({
   const canDecline = hasPermission(role, "quotations.decline");
   const canDuplicate = hasPermission(role, "quotations.create");
   const canConvert = hasPermission(role, "quotations.convert");
+  const canDelete = hasPermission(role, "quotations.delete");
+  const isDeletable = (["DRAFT", "GENERATED", "DECLINED", "EXPIRED"] as string[]).includes(quotation.status);
   const recipientEmail = quotation.client?.email ?? quotation.group?.email ?? "";
   const recipientPhone = quotation.client?.phone ?? quotation.group?.phone ?? "";
 
@@ -86,6 +88,7 @@ export default async function QuotationDetailPage({
   const declineAction = transitionStatusAction.bind(null, quotation.id, "DECLINED");
   const duplicateAction = duplicateQuotationAction.bind(null, quotation.id);
   const convertAction = convertToPolicyAction.bind(null, quotation.id);
+  const deleteAction = deleteQuotationAction.bind(null, quotation.id);
 
   const categoryRows =
     quotation.type === "GROUP"
@@ -390,6 +393,17 @@ export default async function QuotationDetailPage({
                 >
                   <ShieldPlus className="h-4 w-4" /> View Policy
                 </Link>
+              )}
+
+              {isDeletable && canDelete && (
+                <ConfirmSubmitButton
+                  action={deleteAction}
+                  label="Delete"
+                  confirmTitle="Delete this quotation?"
+                  confirmMessage={`This removes ${quotation.referenceCode} from lists, search, and QR verification. The record and its full audit history are kept, not destroyed, but this can't be undone from here.`}
+                  variant="danger"
+                  requireReason
+                />
               )}
             </div>
           </div>

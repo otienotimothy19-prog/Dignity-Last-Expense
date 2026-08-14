@@ -13,14 +13,14 @@ export default async function VerifyPage({
   const { reference } = await params;
 
   const quotation = await prisma.quotation.findUnique({
-    where: { referenceCode: reference },
+    where: { referenceCode: reference, deletedAt: null },
     include: { client: true, group: true, plan: true, benefitOption: true },
   });
 
   const policy = quotation
     ? null
     : await prisma.policy.findUnique({
-        where: { referenceCode: reference },
+        where: { referenceCode: reference, deletedAt: null },
         include: { client: true, group: true, plan: true, benefitOption: true },
       });
 

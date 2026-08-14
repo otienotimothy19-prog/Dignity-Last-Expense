@@ -273,6 +273,48 @@ export async function duplicateQuotationAction(quotationId: string) {
   redirect(`/quotations/${duplicate.id}`);
 }
 
+// Never DRAFT/GENERATED/DECLINED/EXPIRED's more-committed neighbors:
+// ACCEPTED and CONVERTED_TO_POLICY represent real business events (a client
+// said yes, or a policy now exists referencing this exact quotation) and
+// must never be removable from lists, regardless of permission.
+const DELETABLE_QUOTATION_STATUSES: QuotationStatus[] = ["DRAFT", "GENERATED", "DECLINED", "EXPIRED"];
+
+/**
+ * Soft-deletes a quotation — sets deletedAt so it drops out of lists,
+ * search, and QR verification, but the row and everything referencing it
+ * (audit log, versions, members, documents, email log) stays intact. Never
+ * available for ACCEPTED or CONVERTED_TO_POLICY quotations.
+ */
+export async function deleteQuotationAction(quotationId: string, formData: FormData) {
+  const session = await auth();
+  if (!session?.user || !hasPermission(session.user.role, "quotations.delete")) {
+    throw new Error("Not authorized to delete quotations.");
+  }
+
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!reason) {
+    throw new Error("A reason is required to delete a quotation.");
+  }
+
+  const quotation = await prisma.quotation.findUniqueOrThrow({ where: { id: quotationId } });
+  if (!DELETABLE_QUOTATION_STATUSES.includes(quotation.status)) {
+    throw new Error(`Cannot delete a quotation in ${quotation.status} status.`);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.quotation.update({ where: { id: quotationId }, data: { deletedAt: new Date() } });
+    await logAudit(tx, {
+      userId: session.user.id,
+      action: "QUOTATION_DELETED",
+      entityType: "Quotation",
+      entityRef: quotation.referenceCode,
+      reason,
+    });
+  });
+
+  redirect("/quotations");
+}
+
 export async function convertToPolicyAction(quotationId: string) {
   const session = await auth();
   if (!session?.user || !hasPermission(session.user.role, "quotations.convert")) {

@@ -29,12 +29,12 @@ export default async function DashboardPage() {
   sixtyDaysOut.setDate(sixtyDaysOut.getDate() + 60);
 
   const [total, pending, accepted, activePolicies, expiringPolicies, premiumAgg, recentAudit] = await Promise.all([
-    prisma.quotation.count(),
-    prisma.quotation.count({ where: { status: { in: ["GENERATED", "SENT"] } } }),
-    prisma.quotation.count({ where: { status: "ACCEPTED" } }),
-    prisma.policy.count({ where: { status: "ACTIVE" } }),
-    prisma.policy.count({ where: { status: "ACTIVE", coverEnd: { lte: sixtyDaysOut } } }),
-    prisma.quotation.aggregate({ _sum: { totalPremium: true } }),
+    prisma.quotation.count({ where: { deletedAt: null } }),
+    prisma.quotation.count({ where: { deletedAt: null, status: { in: ["GENERATED", "SENT"] } } }),
+    prisma.quotation.count({ where: { deletedAt: null, status: "ACCEPTED" } }),
+    prisma.policy.count({ where: { deletedAt: null, status: "ACTIVE" } }),
+    prisma.policy.count({ where: { deletedAt: null, status: "ACTIVE", coverEnd: { lte: sixtyDaysOut } } }),
+    prisma.quotation.aggregate({ where: { deletedAt: null }, _sum: { totalPremium: true } }),
     prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 10, include: { user: true } }),
   ]);
 

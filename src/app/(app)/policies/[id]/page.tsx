@@ -9,7 +9,8 @@ import { ReferenceBadge } from "@/components/ui/ReferenceBadge";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Table, THead, TBody, Tr, Th, Td, TableCard } from "@/components/ui/Table";
-import { generatePolicyPdfAction } from "./actions";
+import { ConfirmSubmitButton } from "@/components/ui/ConfirmationDialog";
+import { generatePolicyPdfAction, deletePolicyAction } from "./actions";
 
 const RELATIONSHIP_LABEL: Record<string, string> = {
   PRINCIPAL: "Principal",
@@ -43,10 +44,11 @@ export default async function PolicyDetailPage({
       },
     }),
   ]);
-  if (!policy) notFound();
+  if (!policy || policy.deletedAt) notFound();
 
   const role = session?.user.role ?? "";
   const canGenerate = hasPermission(role, "quotations.generate");
+  const canDelete = hasPermission(role, "quotations.delete");
 
   const auditHistory = await prisma.auditLog.findMany({
     where: { entityRef: policy.referenceCode },
@@ -56,6 +58,7 @@ export default async function PolicyDetailPage({
 
   const entityName = policy.client?.fullName ?? policy.group?.name ?? "—";
   const generatePdf = generatePolicyPdfAction.bind(null, policy.id);
+  const deleteAction = deletePolicyAction.bind(null, policy.id);
 
   const categoryRows =
     policy.members.length === 0
@@ -262,6 +265,17 @@ export default async function PolicyDetailPage({
                     <FileDown className="h-4 w-4" /> Generate PDF
                   </button>
                 </form>
+              )}
+
+              {canDelete && (
+                <ConfirmSubmitButton
+                  action={deleteAction}
+                  label="Delete"
+                  confirmTitle="Delete this policy?"
+                  confirmMessage={`This removes ${policy.referenceCode} from lists, search, and QR verification. The record and its full audit history are kept, not destroyed, but this can't be undone from here. Only do this for a genuine duplicate or mistaken issuance — not to cancel real cover.`}
+                  variant="danger"
+                  requireReason
+                />
               )}
             </div>
           </div>
