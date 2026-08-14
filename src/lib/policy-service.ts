@@ -8,11 +8,14 @@ import { logAudit } from "@/lib/audit";
  * premium, members) rather than re-derived, so the policy inherits the
  * exact numbers the client accepted — never a live re-price.
  *
- * premiumPaid mirrors the quotation's total premium: no payment-collection
- * flow exists yet (the Payment model is designed but unused), so issuance
- * currently assumes the premium was settled outside the system. A real
- * payment-recording step would set this from actual received amounts and
- * likely gate `status` on it instead of issuing ACTIVE immediately.
+ * premiumPaid mirrors the quotation's total premium rather than summing
+ * recorded Payment rows — payments can be recorded against a quotation, but
+ * nothing currently requires them to cover the full premium before issuance,
+ * so issuance still assumes the premium was settled. A stricter flow would
+ * gate `status` on the recorded total instead of issuing ACTIVE immediately.
+ *
+ * Also requires at least one beneficiary on the quotation — see the
+ * Beneficiary model comment for why this is a separate concept from members.
  */
 export async function issuePolicyFromQuotation(
   tx: Prisma.TransactionClient,
@@ -30,6 +33,10 @@ export async function issuePolicyFromQuotation(
 
   if (quotation.status !== "ACCEPTED") {
     throw new Error(`Cannot issue a policy from a quotation in ${quotation.status} status — it must be ACCEPTED first.`);
+  }
+
+  if (quotation.beneficiaries.length === 0) {
+    throw new Error("Cannot issue a policy without at least one beneficiary recorded on the quotation.");
   }
 
   const quotationVersion = quotation.versions[0];

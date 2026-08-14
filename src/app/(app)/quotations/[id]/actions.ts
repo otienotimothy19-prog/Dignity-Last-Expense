@@ -281,6 +281,84 @@ export async function duplicateQuotationAction(quotationId: string) {
  * outstandingBalance is computed against ALL payments recorded so far
  * (not just this one), so partial payments accumulate correctly.
  */
+/**
+ * Adds a beneficiary directly on the quotation — needed as a fallback since
+ * the wizard's beneficiary step is optional at creation time, but at least
+ * one beneficiary is REQUIRED before a quotation can convert to a policy
+ * (see issuePolicyFromQuotation). Individual/Nuclear/Extended Family
+ * quotations are capped at one beneficiary, matching the wizard's rule;
+ * Group quotations aren't capped here since they can have one per family.
+ * Reuses quotations.edit — same "update this record's details" capability.
+ */
+export async function addQuotationBeneficiaryAction(quotationId: string, formData: FormData) {
+  const session = await auth();
+  if (!session?.user || !hasPermission(session.user.role, "quotations.edit")) {
+    throw new Error("Not authorized to edit quotation beneficiaries.");
+  }
+
+  const fullName = String(formData.get("fullName") ?? "").trim();
+  const relationship = String(formData.get("relationship") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  if (!fullName || !relationship || !phone) {
+    throw new Error("Full name, relationship, and phone are all required to add a beneficiary.");
+  }
+
+  const quotation = await prisma.quotation.findUniqueOrThrow({
+    where: { id: quotationId },
+    include: { beneficiaries: true },
+  });
+  if (quotation.status === "CONVERTED_TO_POLICY") {
+    throw new Error("This quotation has already been converted to a policy — edit beneficiaries there instead.");
+  }
+  if (quotation.type === "INDIVIDUAL" && quotation.beneficiaries.length >= 1) {
+    throw new Error("Individual/Family quotations take only one beneficiary — remove the existing one first.");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.beneficiary.create({ data: { quotationId, fullName, relationship, phone } });
+    await logAudit(tx, {
+      userId: session.user.id,
+      action: "BENEFICIARY_ADDED",
+      entityType: "Quotation",
+      entityRef: quotation.referenceCode,
+      newValue: { fullName, relationship, phone },
+    });
+  });
+
+  revalidatePath(`/quotations/${quotationId}`);
+}
+
+export async function removeQuotationBeneficiaryAction(quotationId: string, beneficiaryId: string) {
+  const session = await auth();
+  if (!session?.user || !hasPermission(session.user.role, "quotations.edit")) {
+    throw new Error("Not authorized to edit quotation beneficiaries.");
+  }
+
+  const [quotation, beneficiary] = await Promise.all([
+    prisma.quotation.findUniqueOrThrow({ where: { id: quotationId } }),
+    prisma.beneficiary.findUniqueOrThrow({ where: { id: beneficiaryId } }),
+  ]);
+  if (quotation.status === "CONVERTED_TO_POLICY") {
+    throw new Error("This quotation has already been converted to a policy — edit beneficiaries there instead.");
+  }
+  if (beneficiary.quotationId !== quotationId) {
+    throw new Error("Beneficiary does not belong to this quotation.");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.beneficiary.delete({ where: { id: beneficiaryId } });
+    await logAudit(tx, {
+      userId: session.user.id,
+      action: "BENEFICIARY_REMOVED",
+      entityType: "Quotation",
+      entityRef: quotation.referenceCode,
+      oldValue: { fullName: beneficiary.fullName, relationship: beneficiary.relationship, phone: beneficiary.phone },
+    });
+  });
+
+  revalidatePath(`/quotations/${quotationId}`);
+}
+
 export async function recordQuotationPaymentAction(
   quotationId: string,
   _prevState: string | undefined,

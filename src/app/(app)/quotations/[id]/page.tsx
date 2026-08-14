@@ -23,7 +23,15 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Table, THead, TBody, Tr, Th, Td, TableCard } from "@/components/ui/Table";
 import { ConfirmSubmitButton } from "@/components/ui/ConfirmationDialog";
-import { generatePdfAction, transitionStatusAction, duplicateQuotationAction, convertToPolicyAction, deleteQuotationAction } from "./actions";
+import {
+  generatePdfAction,
+  transitionStatusAction,
+  duplicateQuotationAction,
+  convertToPolicyAction,
+  deleteQuotationAction,
+  addQuotationBeneficiaryAction,
+  removeQuotationBeneficiaryAction,
+} from "./actions";
 import { SendQuotationForm } from "./SendQuotationForm";
 import { WhatsAppShare } from "./WhatsAppShare";
 import { RecordPaymentForm } from "./RecordPaymentForm";
@@ -72,7 +80,10 @@ export default async function QuotationDetailPage({
   const canConvert = hasPermission(role, "quotations.convert");
   const canDelete = hasPermission(role, "quotations.delete");
   const canRecordPayment = hasPermission(role, "quotations.record_payment");
+  const canEditBeneficiaries = hasPermission(role, "quotations.edit");
   const isDeletable = (["DRAFT", "GENERATED", "DECLINED", "EXPIRED"] as string[]).includes(quotation.status);
+  const isLockedForEditing = quotation.status === "CONVERTED_TO_POLICY";
+  const canAddMoreBeneficiaries = quotation.type !== "INDIVIDUAL" || quotation.beneficiaries.length === 0;
   const recipientEmail = quotation.client?.email ?? quotation.group?.email ?? "";
   const recipientPhone = quotation.client?.phone ?? quotation.group?.phone ?? "";
 
@@ -95,6 +106,7 @@ export default async function QuotationDetailPage({
   const duplicateAction = duplicateQuotationAction.bind(null, quotation.id);
   const convertAction = convertToPolicyAction.bind(null, quotation.id);
   const deleteAction = deleteQuotationAction.bind(null, quotation.id);
+  const addBeneficiary = addQuotationBeneficiaryAction.bind(null, quotation.id);
 
   const categoryRows =
     quotation.type === "GROUP"
@@ -234,7 +246,7 @@ export default async function QuotationDetailPage({
               <EmptyState
                 icon={Users}
                 title="No beneficiaries captured"
-                description="Who receives the payout — not recorded for this quotation."
+                description="Required before this quotation can be converted to a policy."
               />
             ) : (
               <TableCard>
@@ -243,18 +255,62 @@ export default async function QuotationDetailPage({
                     <Th>Name</Th>
                     <Th>Relationship</Th>
                     <Th>Phone</Th>
+                    <Th />
                   </THead>
                   <TBody>
-                    {quotation.beneficiaries.map((b) => (
-                      <Tr key={b.id}>
-                        <Td className="font-medium text-imoth-navy">{b.fullName}</Td>
-                        <Td>{b.relationship}</Td>
-                        <Td>{b.phone}</Td>
-                      </Tr>
-                    ))}
+                    {quotation.beneficiaries.map((b) => {
+                      const removeAction = removeQuotationBeneficiaryAction.bind(null, quotation.id, b.id);
+                      return (
+                        <Tr key={b.id}>
+                          <Td className="font-medium text-imoth-navy">{b.fullName}</Td>
+                          <Td>{b.relationship}</Td>
+                          <Td>{b.phone}</Td>
+                          <Td className="text-right">
+                            {canEditBeneficiaries && !isLockedForEditing && (
+                              <form action={removeAction}>
+                                <button type="submit" className="text-xs font-medium text-imoth-red hover:underline">
+                                  Remove
+                                </button>
+                              </form>
+                            )}
+                          </Td>
+                        </Tr>
+                      );
+                    })}
                   </TBody>
                 </Table>
               </TableCard>
+            )}
+            {canEditBeneficiaries && !isLockedForEditing && canAddMoreBeneficiaries && (
+              <form action={addBeneficiary} className="mt-4 grid grid-cols-1 gap-3 rounded-lg border border-imoth-grey-border p-4 sm:grid-cols-4">
+                <input
+                  name="fullName"
+                  type="text"
+                  required
+                  placeholder="Full name"
+                  className="rounded-lg border border-imoth-grey-border px-3 py-2 text-sm"
+                />
+                <input
+                  name="relationship"
+                  type="text"
+                  required
+                  placeholder="Relationship"
+                  className="rounded-lg border border-imoth-grey-border px-3 py-2 text-sm"
+                />
+                <input
+                  name="phone"
+                  type="text"
+                  required
+                  placeholder="Phone"
+                  className="rounded-lg border border-imoth-grey-border px-3 py-2 text-sm"
+                />
+                <button
+                  type="submit"
+                  className="rounded-lg bg-imoth-navy px-4 py-2 text-sm font-semibold text-white hover:bg-imoth-navy-light"
+                >
+                  Add beneficiary
+                </button>
+              </form>
             )}
           </Section>
 
@@ -450,12 +506,18 @@ export default async function QuotationDetailPage({
               )}
 
               {quotation.status === "ACCEPTED" && canConvert && (
-                <ConfirmSubmitButton
-                  action={convertAction}
-                  label="Convert to Policy"
-                  confirmTitle="Convert this quotation to a policy?"
-                  confirmMessage={`This issues a new policy from ${quotation.referenceCode} at its accepted premium and locks this quotation as converted. This cannot be undone from here.`}
-                />
+                quotation.beneficiaries.length > 0 ? (
+                  <ConfirmSubmitButton
+                    action={convertAction}
+                    label="Convert to Policy"
+                    confirmTitle="Convert this quotation to a policy?"
+                    confirmMessage={`This issues a new policy from ${quotation.referenceCode} at its accepted premium and locks this quotation as converted. This cannot be undone from here.`}
+                  />
+                ) : (
+                  <p className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-xs font-medium text-orange-800">
+                    Add a beneficiary (below) before this quotation can be converted to a policy.
+                  </p>
+                )
               )}
 
               {quotation.status === "CONVERTED_TO_POLICY" && quotation.policy && (
