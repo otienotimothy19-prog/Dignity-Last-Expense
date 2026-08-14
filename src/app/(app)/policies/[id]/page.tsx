@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Building2, UserRound, FileDown, Wallet, History } from "lucide-react";
+import { ArrowLeft, Building2, UserRound, FileDown, Wallet, History, MessageSquare, CheckCircle2, XCircle } from "lucide-react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { formatKES, formatDateNairobi } from "@/lib/format";
@@ -11,6 +11,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Table, THead, TBody, Tr, Th, Td, TableCard } from "@/components/ui/Table";
 import { ConfirmSubmitButton } from "@/components/ui/ConfirmationDialog";
 import { generatePolicyPdfAction, deletePolicyAction } from "./actions";
+import { SendPolicyForm } from "./SendPolicyForm";
+import { WhatsAppShare } from "./WhatsAppShare";
 
 const RELATIONSHIP_LABEL: Record<string, string> = {
   PRINCIPAL: "Principal",
@@ -48,13 +50,22 @@ export default async function PolicyDetailPage({
 
   const role = session?.user.role ?? "";
   const canGenerate = hasPermission(role, "quotations.generate");
+  const canSend = hasPermission(role, "quotations.send");
   const canDelete = hasPermission(role, "quotations.delete");
+  const recipientEmail = policy.client?.email ?? policy.group?.email ?? "";
+  const recipientPhone = policy.client?.phone ?? policy.group?.phone ?? "";
 
-  const auditHistory = await prisma.auditLog.findMany({
-    where: { entityRef: policy.referenceCode },
-    orderBy: { createdAt: "desc" },
-    include: { user: true },
-  });
+  const [auditHistory, emailHistory] = await Promise.all([
+    prisma.auditLog.findMany({
+      where: { entityRef: policy.referenceCode },
+      orderBy: { createdAt: "desc" },
+      include: { user: true },
+    }),
+    prisma.emailLog.findMany({
+      where: { entityRef: policy.referenceCode },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
 
   const entityName = policy.client?.fullName ?? policy.group?.name ?? "—";
   const generatePdf = generatePolicyPdfAction.bind(null, policy.id);
@@ -226,6 +237,45 @@ export default async function PolicyDetailPage({
             )}
           </Section>
 
+          <Section title="Communication History" icon={MessageSquare}>
+            {emailHistory.length === 0 ? (
+              <EmptyState title="No send attempts yet" description="Every send attempt — successful or failed — is recorded here." />
+            ) : (
+              <TableCard>
+                <Table>
+                  <THead>
+                    <Th>Channel</Th>
+                    <Th>Recipient</Th>
+                    <Th>Status</Th>
+                    <Th>Date</Th>
+                  </THead>
+                  <TBody>
+                    {emailHistory.map((e) => (
+                      <Tr key={e.id}>
+                        <Td className="font-medium text-imoth-navy">{e.channel}</Td>
+                        <Td>{e.toAddress}</Td>
+                        <Td>
+                          {e.status === "SENT" ? (
+                            <span className="inline-flex items-center gap-1 text-status-green">
+                              <CheckCircle2 className="h-3.5 w-3.5" /> Sent
+                            </span>
+                          ) : e.status === "FAILED" ? (
+                            <span className="inline-flex items-center gap-1 text-status-red" title={e.error ?? ""}>
+                              <XCircle className="h-3.5 w-3.5" /> Failed
+                            </span>
+                          ) : (
+                            <span className="text-imoth-grey-muted">Queued</span>
+                          )}
+                        </Td>
+                        <Td className="text-imoth-grey-muted">{formatDateNairobi(e.createdAt)}</Td>
+                      </Tr>
+                    ))}
+                  </TBody>
+                </Table>
+              </TableCard>
+            )}
+          </Section>
+
           <Section title="Audit History" icon={History}>
             {auditHistory.length === 0 ? (
               <EmptyState title="No audit entries" description="Actions on this policy will be recorded here." />
@@ -265,6 +315,21 @@ export default async function PolicyDetailPage({
                     <FileDown className="h-4 w-4" /> Generate PDF
                   </button>
                 </form>
+              )}
+
+              {canSend && policy.documents.length > 0 && (
+                <SendPolicyForm policyId={policy.id} defaultEmail={recipientEmail} />
+              )}
+
+              {canSend && policy.documents.length > 0 && (
+                <WhatsAppShare
+                  policyId={policy.id}
+                  referenceCode={policy.referenceCode}
+                  entityName={entityName}
+                  planLabel={`${policy.plan.name} — ${policy.benefitOption.name}`}
+                  totalPremium={formatKES(policy.premiumPaid.toString())}
+                  defaultPhone={recipientPhone}
+                />
               )}
 
               {canDelete && (
