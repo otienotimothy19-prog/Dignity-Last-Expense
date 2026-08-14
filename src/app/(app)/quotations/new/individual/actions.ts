@@ -4,8 +4,22 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { hasPermission, canOverrideEligibility } from "@/lib/permissions";
-import { createIndividualQuotation, type MemberInput } from "@/lib/quotation-service";
+import { createIndividualQuotation, type MemberInput, type BeneficiaryInput } from "@/lib/quotation-service";
 import type { RelationshipType } from "@prisma/client";
+
+function parseBeneficiaries(formData: FormData): BeneficiaryInput[] {
+  const out: BeneficiaryInput[] = [];
+  for (let i = 0; i < 3; i++) {
+    const fullName = String(formData.get(`beneficiary_name_${i}`) ?? "").trim();
+    if (!fullName) continue;
+    out.push({
+      fullName,
+      relationship: String(formData.get(`beneficiary_relationship_${i}`) ?? "").trim() || "Not specified",
+      phone: String(formData.get(`beneficiary_phone_${i}`) ?? "").trim(),
+    });
+  }
+  return out;
+}
 
 function rows(
   formData: FormData,
@@ -97,6 +111,7 @@ export async function createIndividualQuotationAction(formData: FormData) {
       rate,
       planId: benefitOption.planId,
       members,
+      beneficiaries: parseBeneficiaries(formData),
       createdById: session.user.id,
       validUntil,
     })

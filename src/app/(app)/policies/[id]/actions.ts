@@ -24,6 +24,65 @@ export async function generatePolicyPdfAction(policyId: string) {
   revalidatePath(`/policies/${policyId}`);
 }
 
+// Reuses quotations.edit — same "update this record's details" capability,
+// no dedicated policies.* permission dimension exists yet.
+export async function addBeneficiaryAction(policyId: string, formData: FormData) {
+  const session = await auth();
+  if (!session?.user || !hasPermission(session.user.role, "quotations.edit")) {
+    throw new Error("Not authorized to edit policy beneficiaries.");
+  }
+
+  const fullName = String(formData.get("fullName") ?? "").trim();
+  const relationship = String(formData.get("relationship") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  if (!fullName || !relationship || !phone) {
+    throw new Error("Full name, relationship, and phone are all required to add a beneficiary.");
+  }
+
+  const policy = await prisma.policy.findUniqueOrThrow({ where: { id: policyId } });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.beneficiary.create({ data: { policyId, fullName, relationship, phone } });
+    await logAudit(tx, {
+      userId: session.user.id,
+      action: "BENEFICIARY_ADDED",
+      entityType: "Policy",
+      entityRef: policy.referenceCode,
+      newValue: { fullName, relationship, phone },
+    });
+  });
+
+  revalidatePath(`/policies/${policyId}`);
+}
+
+export async function removeBeneficiaryAction(policyId: string, beneficiaryId: string) {
+  const session = await auth();
+  if (!session?.user || !hasPermission(session.user.role, "quotations.edit")) {
+    throw new Error("Not authorized to edit policy beneficiaries.");
+  }
+
+  const [policy, beneficiary] = await Promise.all([
+    prisma.policy.findUniqueOrThrow({ where: { id: policyId } }),
+    prisma.beneficiary.findUniqueOrThrow({ where: { id: beneficiaryId } }),
+  ]);
+  if (beneficiary.policyId !== policyId) {
+    throw new Error("Beneficiary does not belong to this policy.");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.beneficiary.delete({ where: { id: beneficiaryId } });
+    await logAudit(tx, {
+      userId: session.user.id,
+      action: "BENEFICIARY_REMOVED",
+      entityType: "Policy",
+      entityRef: policy.referenceCode,
+      oldValue: { fullName: beneficiary.fullName, relationship: beneficiary.relationship, phone: beneficiary.phone },
+    });
+  });
+
+  revalidatePath(`/policies/${policyId}`);
+}
+
 /**
  * Sends the most recently generated policy certificate by email and records
  * the attempt in EmailLog regardless of outcome. Reuses quotations.send —

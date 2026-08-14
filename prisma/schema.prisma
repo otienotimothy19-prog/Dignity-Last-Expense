@@ -369,11 +369,12 @@ model Quotation {
   // and every related record stay intact.
   deletedAt  DateTime?  @map("deleted_at")
 
-  versions   QuotationVersion[]
-  members    QuotationMember[]
-  documents  Document[]
-  policy     Policy?
-  payments   Payment[]
+  versions      QuotationVersion[]
+  members       QuotationMember[]
+  documents     Document[]
+  policy        Policy?
+  payments      Payment[]
+  beneficiaries Beneficiary[]
 
   @@index([status])
   @@index([deletedAt])
@@ -471,9 +472,10 @@ model Policy {
   // Soft delete only — see the matching note on Quotation.deletedAt.
   deletedAt  DateTime?  @map("deleted_at")
 
-  members    PolicyMember[]
-  documents  Document[]
-  payments   Payment[]
+  members       PolicyMember[]
+  documents     Document[]
+  payments      Payment[]
+  beneficiaries Beneficiary[]
 
   @@index([status])
   @@index([deletedAt])
@@ -495,6 +497,32 @@ model PolicyMember {
   createdAt      DateTime         @default(now()) @map("created_at")
 
   @@map("policy_members")
+}
+
+// ---------------------------------------------------------------------------
+// Beneficiaries
+// ---------------------------------------------------------------------------
+
+// Who receives the payout — distinct from QuotationMember/PolicyMember, which
+// are the insured persons the cover is priced against. Captured at quotation
+// time and carried forward as new rows on conversion (not shared/relinked,
+// so editing a policy's beneficiaries afterward never rewrites the original
+// quotation's snapshot) and can also be added/edited directly on the policy.
+model Beneficiary {
+  id           String     @id @default(uuid())
+  quotationId  String?    @map("quotation_id")
+  quotation    Quotation? @relation(fields: [quotationId], references: [id])
+  policyId     String?    @map("policy_id")
+  policy       Policy?    @relation(fields: [policyId], references: [id])
+  fullName     String     @map("full_name")
+  relationship String
+  phone        String
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  @@index([quotationId])
+  @@index([policyId])
+  @@map("beneficiaries")
 }
 
 // ---------------------------------------------------------------------------

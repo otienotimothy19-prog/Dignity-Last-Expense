@@ -23,6 +23,7 @@ export const QUOTATION_PERMISSIONS = [
   // for policy PDF generation), and both are the same "remove a mistaken
   // or unwanted record" capability restricted to the same trust level.
   "quotations.delete",
+  "quotations.record_payment",
 ] as const;
 
 export type RatePermission = (typeof RATE_PERMISSIONS)[number];
@@ -48,6 +49,9 @@ const PERMISSION_ROLES: Record<Permission, RoleName[]> = {
   "quotations.decline": ["SUPER_ADMIN", "ADMINISTRATOR", "AGENT", "UNDERWRITER"],
   "quotations.convert": ["SUPER_ADMIN", "ADMINISTRATOR", "UNDERWRITER"],
   "quotations.delete": ["SUPER_ADMIN", "ADMINISTRATOR"],
+  // FINANCE is included here (unlike most quotations.* actions) since
+  // recording a payment is literally that role's purpose.
+  "quotations.record_payment": ["SUPER_ADMIN", "ADMINISTRATOR", "AGENT", "FINANCE"],
 };
 
 // Roles allowed to override a flagged (age/limit-ineligible) member instead

@@ -273,6 +273,70 @@ export async function duplicateQuotationAction(quotationId: string) {
   redirect(`/quotations/${duplicate.id}`);
 }
 
+/**
+ * Records a premium payment against a quotation — the transaction code
+ * field is the existing (previously unused) Payment.mpesaCode column.
+ * Recording happens on the quotation, before conversion, per this app's
+ * flow; policies don't get their own payment-recording entry point.
+ * outstandingBalance is computed against ALL payments recorded so far
+ * (not just this one), so partial payments accumulate correctly.
+ */
+export async function recordQuotationPaymentAction(
+  quotationId: string,
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  const session = await auth();
+  if (!session?.user || !hasPermission(session.user.role, "quotations.record_payment")) {
+    return "Not authorized to record payments.";
+  }
+
+  const amountPaid = Number(formData.get("amountPaid"));
+  if (!Number.isFinite(amountPaid) || amountPaid <= 0) {
+    return "Enter a valid amount paid.";
+  }
+  const transactionCode = String(formData.get("transactionCode") ?? "").trim();
+  if (!transactionCode) {
+    return "Enter the M-Pesa transaction code.";
+  }
+
+  const quotation = await prisma.quotation.findUniqueOrThrow({
+    where: { id: quotationId },
+    include: { payments: true },
+  });
+  if (quotation.status === "CONVERTED_TO_POLICY") {
+    return "This quotation has already been converted to a policy — record further payments there.";
+  }
+
+  const alreadyPaid = quotation.payments.reduce((sum, p) => sum + Number(p.amountPaid), 0);
+  const totalPremium = Number(quotation.totalPremium);
+  const outstandingBalance = Math.max(0, totalPremium - (alreadyPaid + amountPaid));
+
+  await prisma.$transaction(async (tx) => {
+    await tx.payment.create({
+      data: {
+        quotationId: quotation.id,
+        amountInvoiced: totalPremium,
+        amountPaid,
+        method: "MPESA",
+        mpesaCode: transactionCode,
+        paymentDate: new Date(),
+        outstandingBalance,
+        recordedById: session.user.id,
+      },
+    });
+    await logAudit(tx, {
+      userId: session.user.id,
+      action: "PAYMENT_RECORDED",
+      entityType: "Quotation",
+      entityRef: quotation.referenceCode,
+      newValue: { amountPaid, transactionCode, outstandingBalance },
+    });
+  });
+
+  revalidatePath(`/quotations/${quotationId}`);
+}
+
 // Never DRAFT/GENERATED/DECLINED/EXPIRED's more-committed neighbors:
 // ACCEPTED and CONVERTED_TO_POLICY represent real business events (a client
 // said yes, or a policy now exists referencing this exact quotation) and

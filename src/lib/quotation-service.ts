@@ -9,6 +9,12 @@ import type { ScheduleRowResult } from "@/lib/group-schedule";
 export { classifyMembers } from "@/lib/eligibility";
 export type { MemberInput, ClassifiedMember } from "@/lib/eligibility";
 
+export type BeneficiaryInput = {
+  fullName: string;
+  relationship: string;
+  phone: string;
+};
+
 export async function createIndividualQuotation(
   tx: Prisma.TransactionClient,
   params: {
@@ -17,6 +23,7 @@ export async function createIndividualQuotation(
     rate: RateVersion;
     planId: string;
     members: MemberInput[];
+    beneficiaries?: BeneficiaryInput[];
     createdById: string;
     validUntil: Date;
   }
@@ -75,6 +82,17 @@ export async function createIndividualQuotation(
     await tx.quotationMember.createMany({ data: memberRows });
   }
 
+  if (params.beneficiaries && params.beneficiaries.length > 0) {
+    await tx.beneficiary.createMany({
+      data: params.beneficiaries.map((b) => ({
+        quotationId: quotation.id,
+        fullName: b.fullName,
+        relationship: b.relationship,
+        phone: b.phone,
+      })),
+    });
+  }
+
   await tx.quotationVersion.create({
     data: {
       quotationId: quotation.id,
@@ -130,6 +148,7 @@ export async function createGroupQuotation(
     numParentsInLaw: number;
     /** Full validated member schedule (CSV upload or manual entry), when supplied instead of a summary-only count. */
     schedule?: ScheduleRowResult[];
+    beneficiaries?: BeneficiaryInput[];
     createdById: string;
     validUntil: Date;
   }
@@ -200,6 +219,17 @@ export async function createGroupQuotation(
     if (memberRows.length > 0) {
       await tx.quotationMember.createMany({ data: memberRows });
     }
+  }
+
+  if (params.beneficiaries && params.beneficiaries.length > 0) {
+    await tx.beneficiary.createMany({
+      data: params.beneficiaries.map((b) => ({
+        quotationId: quotation.id,
+        fullName: b.fullName,
+        relationship: b.relationship,
+        phone: b.phone,
+      })),
+    });
   }
 
   await tx.quotationVersion.create({

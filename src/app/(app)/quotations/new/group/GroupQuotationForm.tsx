@@ -12,7 +12,7 @@ import {
 import type { RelationshipType } from "@prisma/client";
 import { createGroupQuotationAction } from "./actions";
 
-const STEPS = ["Group", "Cover", "Members", "Premium", "Review"];
+const STEPS = ["Group", "Cover", "Members", "Beneficiaries", "Premium", "Review"];
 const GROUP_TYPES = ["SACCO", "CHURCH", "CHAMA", "SME", "EMPLOYER", "OTHER"];
 const RELATIONSHIPS: RelationshipType[] = ["PRINCIPAL", "SPOUSE", "CHILD", "PARENT", "PARENT_IN_LAW"];
 
@@ -181,7 +181,7 @@ export function GroupQuotationForm({ options, allowOverride }: { options: GroupB
       invalidField.reportValidity();
       return;
     }
-    setStep((s) => Math.min(5, s + 1));
+    setStep((s) => Math.min(6, s + 1));
   };
   const goBack = () => setStep((s) => Math.max(1, s - 1));
 
@@ -445,12 +445,29 @@ export function GroupQuotationForm({ options, allowOverride }: { options: GroupB
           </div>
 
           <div data-step={4} className={step === 4 ? "" : "hidden"}>
+            <Section title="Beneficiaries (optional)">
+              <p className="mb-4 text-xs text-imoth-grey-muted">
+                Who receives the payout for this group&apos;s cover.
+              </p>
+              <div className="grid grid-cols-3 gap-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="col-span-3 grid grid-cols-3 gap-4 border-t border-imoth-grey-border/60 pt-3 first:border-0 first:pt-0">
+                    <TextField label={`Beneficiary ${i + 1} full name`} name={`beneficiary_name_${i}`} />
+                    <TextField label="Relationship" name={`beneficiary_relationship_${i}`} />
+                    <TextField label="Phone" name={`beneficiary_phone_${i}`} />
+                  </div>
+                ))}
+              </div>
+            </Section>
+          </div>
+
+          <div data-step={5} className={step === 5 ? "" : "hidden"}>
             <Section title="Premium">
               <PremiumSummary preview={preview} />
             </Section>
           </div>
 
-          <div data-step={5} className={step === 5 ? "" : "hidden"}>
+          <div data-step={6} className={step === 6 ? "" : "hidden"}>
             <Section title="Review">
               <p className="text-sm text-imoth-grey-muted">
                 Confirm the details below, then generate the quotation.
@@ -470,7 +487,7 @@ export function GroupQuotationForm({ options, allowOverride }: { options: GroupB
             >
               Back
             </button>
-            {step < 5 ? (
+            {step < 6 ? (
               <button
                 type="button"
                 onClick={goNext}

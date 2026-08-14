@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Building2, UserRound, FileDown, Wallet, History, MessageSquare, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, Building2, UserRound, FileDown, Wallet, History, MessageSquare, CheckCircle2, XCircle, Users } from "lucide-react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { formatKES, formatDateNairobi } from "@/lib/format";
@@ -10,7 +10,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Table, THead, TBody, Tr, Th, Td, TableCard } from "@/components/ui/Table";
 import { ConfirmSubmitButton } from "@/components/ui/ConfirmationDialog";
-import { generatePolicyPdfAction, deletePolicyAction } from "./actions";
+import { generatePolicyPdfAction, deletePolicyAction, addBeneficiaryAction, removeBeneficiaryAction } from "./actions";
 import { SendPolicyForm } from "./SendPolicyForm";
 import { WhatsAppShare } from "./WhatsAppShare";
 
@@ -43,6 +43,7 @@ export default async function PolicyDetailPage({
         payments: { orderBy: { createdAt: "desc" } },
         issuedBy: true,
         quotation: true,
+        beneficiaries: true,
       },
     }),
   ]);
@@ -52,6 +53,8 @@ export default async function PolicyDetailPage({
   const canGenerate = hasPermission(role, "quotations.generate");
   const canSend = hasPermission(role, "quotations.send");
   const canDelete = hasPermission(role, "quotations.delete");
+  const canEditBeneficiaries = hasPermission(role, "quotations.edit");
+  const addBeneficiary = addBeneficiaryAction.bind(null, policy.id);
   const recipientEmail = policy.client?.email ?? policy.group?.email ?? "";
   const recipientPhone = policy.client?.phone ?? policy.group?.phone ?? "";
 
@@ -175,6 +178,79 @@ export default async function PolicyDetailPage({
               </TableCard>
             ) : (
               <EmptyState title="No insured persons recorded" description="This policy has no named members or category counts." />
+            )}
+          </Section>
+
+          <Section title="Beneficiaries" icon={Users}>
+            {policy.beneficiaries.length === 0 ? (
+              <EmptyState
+                icon={Users}
+                title="No beneficiaries recorded"
+                description="Who receives the payout — add one below."
+              />
+            ) : (
+              <TableCard>
+                <Table>
+                  <THead>
+                    <Th>Name</Th>
+                    <Th>Relationship</Th>
+                    <Th>Phone</Th>
+                    <Th />
+                  </THead>
+                  <TBody>
+                    {policy.beneficiaries.map((b) => {
+                      const removeAction = removeBeneficiaryAction.bind(null, policy.id, b.id);
+                      return (
+                        <Tr key={b.id}>
+                          <Td className="font-medium text-imoth-navy">{b.fullName}</Td>
+                          <Td>{b.relationship}</Td>
+                          <Td>{b.phone}</Td>
+                          <Td className="text-right">
+                            {canEditBeneficiaries && (
+                              <form action={removeAction}>
+                                <button type="submit" className="text-xs font-medium text-imoth-red hover:underline">
+                                  Remove
+                                </button>
+                              </form>
+                            )}
+                          </Td>
+                        </Tr>
+                      );
+                    })}
+                  </TBody>
+                </Table>
+              </TableCard>
+            )}
+            {canEditBeneficiaries && (
+              <form action={addBeneficiary} className="mt-4 grid grid-cols-1 gap-3 rounded-lg border border-imoth-grey-border p-4 sm:grid-cols-4">
+                <input
+                  name="fullName"
+                  type="text"
+                  required
+                  placeholder="Full name"
+                  className="rounded-lg border border-imoth-grey-border px-3 py-2 text-sm"
+                />
+                <input
+                  name="relationship"
+                  type="text"
+                  required
+                  placeholder="Relationship"
+                  className="rounded-lg border border-imoth-grey-border px-3 py-2 text-sm"
+                />
+                <input
+                  name="phone"
+                  type="text"
+                  required
+                  placeholder="Phone"
+                  className="rounded-lg border border-imoth-grey-border px-3 py-2 text-sm"
+                />
+                <button
+                  type="submit"
+                  className="rounded-lg bg-imoth-navy px-4 py-2 text-sm font-semibold text-white hover:bg-imoth-navy-light"
+                >
+                  Add beneficiary
+                </button>
+              </form>
             )}
           </Section>
 

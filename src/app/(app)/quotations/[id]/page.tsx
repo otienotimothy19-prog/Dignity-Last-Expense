@@ -11,6 +11,8 @@ import {
   MessageSquare,
   History,
   Copy,
+  Users,
+  Wallet,
 } from "lucide-react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -24,6 +26,7 @@ import { ConfirmSubmitButton } from "@/components/ui/ConfirmationDialog";
 import { generatePdfAction, transitionStatusAction, duplicateQuotationAction, convertToPolicyAction, deleteQuotationAction } from "./actions";
 import { SendQuotationForm } from "./SendQuotationForm";
 import { WhatsAppShare } from "./WhatsAppShare";
+import { RecordPaymentForm } from "./RecordPaymentForm";
 
 const RELATIONSHIP_LABEL: Record<string, string> = {
   PRINCIPAL: "Principal",
@@ -53,6 +56,8 @@ export default async function QuotationDetailPage({
         documents: { orderBy: { generatedAt: "desc" } },
         createdBy: true,
         policy: true,
+        beneficiaries: true,
+        payments: { orderBy: { createdAt: "desc" } },
       },
     }),
   ]);
@@ -66,6 +71,7 @@ export default async function QuotationDetailPage({
   const canDuplicate = hasPermission(role, "quotations.create");
   const canConvert = hasPermission(role, "quotations.convert");
   const canDelete = hasPermission(role, "quotations.delete");
+  const canRecordPayment = hasPermission(role, "quotations.record_payment");
   const isDeletable = (["DRAFT", "GENERATED", "DECLINED", "EXPIRED"] as string[]).includes(quotation.status);
   const recipientEmail = quotation.client?.email ?? quotation.group?.email ?? "";
   const recipientPhone = quotation.client?.phone ?? quotation.group?.phone ?? "";
@@ -223,6 +229,68 @@ export default async function QuotationDetailPage({
             </div>
           </Section>
 
+          <Section title="Beneficiaries" icon={Users}>
+            {quotation.beneficiaries.length === 0 ? (
+              <EmptyState
+                icon={Users}
+                title="No beneficiaries captured"
+                description="Who receives the payout — not recorded for this quotation."
+              />
+            ) : (
+              <TableCard>
+                <Table>
+                  <THead>
+                    <Th>Name</Th>
+                    <Th>Relationship</Th>
+                    <Th>Phone</Th>
+                  </THead>
+                  <TBody>
+                    {quotation.beneficiaries.map((b) => (
+                      <Tr key={b.id}>
+                        <Td className="font-medium text-imoth-navy">{b.fullName}</Td>
+                        <Td>{b.relationship}</Td>
+                        <Td>{b.phone}</Td>
+                      </Tr>
+                    ))}
+                  </TBody>
+                </Table>
+              </TableCard>
+            )}
+          </Section>
+
+          <Section title="Payment History" icon={Wallet}>
+            {quotation.payments.length === 0 ? (
+              <EmptyState
+                icon={Wallet}
+                title="No payments recorded yet"
+                description="Use Record Payment in the panel to log a premium payment."
+              />
+            ) : (
+              <TableCard>
+                <Table>
+                  <THead>
+                    <Th>Amount Paid</Th>
+                    <Th>Method</Th>
+                    <Th>Transaction Code</Th>
+                    <Th>Outstanding</Th>
+                    <Th>Date</Th>
+                  </THead>
+                  <TBody>
+                    {quotation.payments.map((p) => (
+                      <Tr key={p.id}>
+                        <Td className="font-medium text-imoth-navy">{formatKES(p.amountPaid.toString())}</Td>
+                        <Td>{p.method}</Td>
+                        <Td>{p.mpesaCode ?? "—"}</Td>
+                        <Td>{formatKES(p.outstandingBalance.toString())}</Td>
+                        <Td className="text-imoth-grey-muted">{formatDateNairobi(p.paymentDate)}</Td>
+                      </Tr>
+                    ))}
+                  </TBody>
+                </Table>
+              </TableCard>
+            )}
+          </Section>
+
           <Section title="Documents">
             {quotation.documents.length === 0 ? (
               <EmptyState
@@ -343,6 +411,10 @@ export default async function QuotationDetailPage({
                   totalPremium={formatKES(quotation.totalPremium.toString())}
                   defaultPhone={recipientPhone}
                 />
+              )}
+
+              {quotation.status !== "CONVERTED_TO_POLICY" && canRecordPayment && (
+                <RecordPaymentForm quotationId={quotation.id} />
               )}
 
               {(quotation.status === "GENERATED" || quotation.status === "SENT") && canAccept && (

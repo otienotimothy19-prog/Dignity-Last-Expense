@@ -4,13 +4,27 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { hasPermission, canOverrideEligibility } from "@/lib/permissions";
-import { createGroupQuotation } from "@/lib/quotation-service";
+import { createGroupQuotation, type BeneficiaryInput } from "@/lib/quotation-service";
 import { parseGroupScheduleCsv, evaluateGroupSchedule } from "@/lib/group-schedule";
 import type { GroupType } from "@prisma/client";
 
 function n(formData: FormData, key: string): number {
   const v = Number(formData.get(key));
   return Number.isFinite(v) && v > 0 ? v : 0;
+}
+
+function parseBeneficiaries(formData: FormData): BeneficiaryInput[] {
+  const out: BeneficiaryInput[] = [];
+  for (let i = 0; i < 3; i++) {
+    const fullName = String(formData.get(`beneficiary_name_${i}`) ?? "").trim();
+    if (!fullName) continue;
+    out.push({
+      fullName,
+      relationship: String(formData.get(`beneficiary_relationship_${i}`) ?? "").trim() || "Not specified",
+      phone: String(formData.get(`beneficiary_phone_${i}`) ?? "").trim(),
+    });
+  }
+  return out;
 }
 
 export async function createGroupQuotationAction(formData: FormData) {
@@ -98,6 +112,7 @@ export async function createGroupQuotationAction(formData: FormData) {
       planId: benefitOption.planId,
       ...counts,
       schedule,
+      beneficiaries: parseBeneficiaries(formData),
       createdById: session.user.id,
       validUntil,
     })

@@ -22,6 +22,7 @@ export async function issuePolicyFromQuotation(
     where: { id: params.quotationId },
     include: {
       members: true,
+      beneficiaries: true,
       rateVersion: true,
       versions: { orderBy: { versionNumber: "desc" }, take: 1 },
     },
@@ -74,6 +75,18 @@ export async function issuePolicyFromQuotation(
     }));
   if (memberRows.length > 0) {
     await tx.policyMember.createMany({ data: memberRows });
+  }
+
+  // New rows, not relinked — see the Beneficiary model comment for why.
+  if (quotation.beneficiaries.length > 0) {
+    await tx.beneficiary.createMany({
+      data: quotation.beneficiaries.map((b) => ({
+        policyId: policy.id,
+        fullName: b.fullName,
+        relationship: b.relationship,
+        phone: b.phone,
+      })),
+    });
   }
 
   await tx.quotation.update({ where: { id: quotation.id }, data: { status: "CONVERTED_TO_POLICY" } });
